@@ -7,7 +7,7 @@
 This is a PoC; security issues are fixed on `main`.
 
 ## Reporting a vulnerability
-- Email: security@yourdomain.tld
+- Email: cherifymm@gmail.com
 - Include: steps to reproduce, affected commit/branch, impact, logs if safe.
 - We aim to respond within 72 hours.
 
