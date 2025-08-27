@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # SOC Copilot PoC (PDPL-first, explainable suppression)
 
 **Goal:** Ingest noisy logs → **normalize → PII redaction + residency tag (SA/AE) → cluster (reduce noise) → deterministic summary → guardrailed playbooks** → human approval + audit → metrics.
