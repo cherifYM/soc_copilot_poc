@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 fastapi
 uvicorn
 sqlalchemy>=2.0
@@ -6,3 +7,15 @@ python-dotenv
 requests
 streamlit
 pytest
+=======
+uvicorn==0.27.1
+pydantic==2.6.1
+SQLAlchemy==2.0.29
+requests==2.31.0
+python-dotenv==1.0.1
+streamlit==1.33.0
+pytest
+fastapi==0.112.*
+starlette==0.37.*
+httpx==0.27.*
+>>>>>>> 01defdf (Initial code import (local state))

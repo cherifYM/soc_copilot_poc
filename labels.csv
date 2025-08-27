@@ -1,0 +1,64 @@
+# labels.csv format: event_id, keep_or_drop
+# use 'keep' for truly actionable events, 'drop' for noise/duplicates
+# you can add comments starting with # anywhere
+# --- recent events to label below ---
+# id=123 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+123,drop
+# id=122 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+122,drop
+# id=121 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+121,drop
+# id=120 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+120,drop
+# id=119 status=open type=auth_failure redacted="string"
+119,drop
+# id=118 status=open type=auth_failure redacted="string"
+118,drop
+# id=117 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+117,drop
+# id=116 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+116,drop
+# id=115 status=open type=auth_failure redacted="Successful login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+115,drop
+# id=114 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+114,drop
+# id=113 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+113,drop
+# id=112 status=open type=auth_failure redacted="Successful login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+112,drop
+# id=111 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+111,drop
+# id=110 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+110,drop
+# id=109 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+109,drop
+# id=108 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+108,drop
+# id=107 status=open type=auth_failure redacted="Successful login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+107,drop
+# id=106 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+106,drop
+# id=105 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+105,drop
+# id=104 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+104,drop
+# id=103 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+103,drop
+# id=102 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+102,drop
+# id=101 status=open type=auth_failure redacted="Successful login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+101,drop
+# id=100 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+100,drop
+# id=99 status=open type=auth_failure redacted="string"
+99,drop
+# id=98 status=open type=auth_failure redacted="string"
+98,drop
+# id=97 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+97,drop
+# id=96 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+96,drop
+# id=95 status=open type=auth_failure redacted="Failed login for user [REDACTED:EMAIL] from [REDACTED:IP]"
+95,drop
+# id=94 status=open type=auth_failure redacted="string"
+94,drop

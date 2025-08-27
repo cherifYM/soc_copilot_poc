@@ -1,0 +1,235 @@
+
+diff --git a/app/core/models.py b/app/core/models.py
+index 1a2b3c4..5d6e7f8 100644
+--- a/app/core/models.py
++++ b/app/core/models.py
+@@ -1,6 +1,7 @@
+-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
++from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, func
++from sqlalchemy.dialects.sqlite import JSON
+ from sqlalchemy.orm import relationship
+ from app.core.db import Base
+
+ class Incident(Base):
+     __tablename__ = "incidents"
+@@ -22,14 +23,22 @@ class Incident(Base):
+     last_seen = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+ class Event(Base):
+     __tablename__ = "events"
+     id = Column(Integer, primary_key=True)
+     source = Column(String(64), nullable=False)
+     event_type = Column(String(64), nullable=False)
+     raw = Column(Text, nullable=False, default="")
+     normalized = Column(Text, nullable=False, default="")
+     redacted = Column(Text, nullable=False, default="")
+     residency_tag = Column(String(8), nullable=False)
+     cluster_key = Column(String(64), index=True, nullable=False)
+     incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=False)
+     created_at = Column(DateTime, server_default=func.now())
++    # New fields
++    suppressed = Column(Boolean, nullable=False, server_default="0")  # True if duplicate/noise
++    redaction_map = Column(JSON, nullable=True)  # {pii_type: count}
+
+     incident = relationship("Incident", backref="events")
+diff --git a/app/pipeline/pii_redactor.py b/app/pipeline/pii_redactor.py
+index 9abc111..9abc222 100644
+--- a/app/pipeline/pii_redactor.py
++++ b/app/pipeline/pii_redactor.py
+@@ -1,25 +1,72 @@
+-import re
++import re
++from collections import defaultdict
+
+ EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+ IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
++# Optional extras; keep simple for PoC
++PHONE_RE = re.compile(r"\b\+?\d[\d\-\s]{7,}\d\b")
++CARD_RE = re.compile(r"\b(?:\d[ -]*?){13,16}\b")
+
+-def redact_pii(text: str):
+-    red = EMAIL_RE.sub("[REDACTED:EMAIL]", text)
+-    red = IP_RE.sub("[REDACTED:IP]", red)
+-    # return redacted and a normalized helper (previously unused)
+-    return red, red.lower()
++def _apply(pattern, label, s, counts):
++    def _repl(m):
++        counts[label] += 1
++        return f"[REDACTED:{label}]"
++    return pattern.sub(_repl, s)
++
++def redact_pii(text: str):
++    """Return (redacted_text, redaction_map).
++
++    redaction_map example: {"EMAIL": 1, "IP": 1}
++    """
++    counts = defaultdict(int)
++    out = text
++    out = _apply(EMAIL_RE, "EMAIL", out, counts)
++    out = _apply(IP_RE, "IP", out, counts)
++    out = _apply(PHONE_RE, "PHONE", out, counts)
++    out = _apply(CARD_RE, "CARD", out, counts)
++    return out, dict(counts)
+
+ def residency_tag(evt: dict, default_tag: str = "SA") -> str:
+     region = (evt.get("region") or "").upper()
+     if region in {"SA", "AE"}:
+         return region
+     return default_tag
+diff --git a/app/api/main.py b/app/api/main.py
+index 7777777..8888888 100644
+--- a/app/api/main.py
++++ b/app/api/main.py
+@@ -1,9 +1,10 @@
+-from fastapi import FastAPI, Depends, HTTPException
++from fastapi import FastAPI, Depends, HTTPException
+ from fastapi.middleware.cors import CORSMiddleware
+ from pydantic import BaseModel, Field
+ from typing import List, Optional
+ from sqlalchemy.orm import Session
+ from app.core.db import Base, engine, get_db
+ from app.core import models
+ from app.pipeline.normalizer import normalize_event
+-from app.pipeline.pii_redactor import redact_pii, residency_tag
++from app.pipeline.pii_redactor import redact_pii, residency_tag
+ from app.pipeline.clustering import cluster_key, incident_title
+ from app.pipeline.summarizer import summarize_incident
+ from app.playbooks.suggester import suggest_actions
+@@ -47,25 +48,50 @@ def ingest_logs(payload: IngestRequest, db: Session = Depends(get_db)):
+     created = 0
+     for e in payload.events:
+         evt = e.dict()
+         norm = normalize_event(evt)
+-        red, nred = redact_pii(evt.get("message", ""))
++        red, red_map = redact_pii(evt.get("message", ""))
+         tag = residency_tag(evt, DEFAULT_TAG)
+         norm_cluster = normalize_event({**evt, "message": red})
+         ck = cluster_key(evt, norm_cluster)
+
+-        et_lower = (e.event_type or "").lower()
+-        if et_lower in BENIGN_TYPES:
+-            ev = models.Event(
+-                source=e.source,
+-                event_type=e.event_type,
+-                raw=e.message if STORE_RAW else "",
+-                normalized=norm_cluster,
+-                redacted=red,
+-                residency_tag=tag,
+-                cluster_key=ck,
+-                incident_id=None
+-            )
+-            db.add(ev)
+-            created += 1
+-            continue
++        et_lower = (e.event_type or "").lower()
++        # Pre-check whether an incident already exists for this cluster
++        pre_existing_inc = db.query(models.Incident).filter(models.Incident.cluster_key == ck).first()
+
+         # find or create incident
+         incident = db.query(models.Incident).filter(models.Incident.cluster_key == ck).first()
+         if not incident:
+             incident = models.Incident(
+                 title=incident_title(evt),
+                 cluster_key=ck,
+                 summary="",
+                 count=0,
+                 status="open",
+             )
+             db.add(incident)
+             db.flush()
+
++        # Determine if this event is a suppressed duplicate/noise:
++        # - If an incident already existed before inserting this event -> suppressed=True
++        # - Or if the event_type is configured as benign -> suppressed=True
++        suppressed_flag = bool(pre_existing_inc) or (et_lower in BENIGN_TYPES)
++
+         ev = models.Event(
+             source=e.source,
+             event_type=e.event_type,
+             raw=e.message if STORE_RAW else "",
+             normalized=norm_cluster,
+             redacted=red,
+             residency_tag=tag,
+             cluster_key=ck,
+-            incident_id=incident.id
++            incident_id=incident.id,
++            suppressed=suppressed_flag,
++            redaction_map=red_map,
+         )
+         db.add(ev)
+         incident.count += 1
+         # Update summary with a deterministic sample
+         incident.summary = summarize_incident(red, incident.count)
+@@ -113,12 +139,44 @@ def metrics(db: Session = Depends(get_db)):
+-    total_events = db.query(models.Event).count()
+-    total_incidents = db.query(models.Incident).count()
+-    suppression_rate = 1.0 - (total_incidents / total_events) if total_events else 0.0
+-    return {
+-        "events": total_events,
+-        "incidents": total_incidents,
+-        "suppression_rate": round(suppression_rate, 3)
+-    }
++    total_events = db.query(models.Event).count()
++    total_incidents = db.query(models.Incident).count()
++    suppressed = db.query(models.Event).filter(models.Event.suppressed == True).count()  # noqa: E712
++    suppression_rate = (suppressed / total_events) if total_events else 0.0
++    return {
++        "events": total_events,
++        "incidents": total_incidents,
++        "suppressed_events": suppressed,
++        "suppression_rate": round(suppression_rate, 3)
++    }
+
+ @app.get("/evidence/{event_id}")
+ def evidence(event_id: int, db: Session = Depends(get_db)):
+     ev = db.query(models.Event).filter(models.Event.id == event_id).first()
+     if not ev:
+         raise HTTPException(404, "Event not found")
+     return {
+         "event_id": ev.id,
+         "residency_tag": ev.residency_tag,
+         "redacted": ev.redacted,
+         "incident_id": ev.incident_id,
+         "cluster_key": ev.cluster_key,
++        "suppressed": ev.suppressed,
++        "redaction_map": ev.redaction_map or {},
+     }
+
++@app.get("/incidents/by-event/{event_id}")
++def incident_by_event(event_id: int, db: Session = Depends(get_db)):
++    ev = db.get(models.Event, event_id)
++    if not ev:
++        raise HTTPException(404, "event not found")
++    inc = db.get(models.Incident, ev.incident_id) if ev.incident_id else None
++    if not inc:
++        raise HTTPException(404, "incident not found")
++    return {"incident_id": inc.id, "cluster_key": inc.cluster_key, "status": inc.status}
++
++@app.get("/incidents/by-cluster/{ck}")
++def incident_by_cluster(ck: str, db: Session = Depends(get_db)):
++    inc = db.query(models.Incident).filter(models.Incident.cluster_key == ck).first()
++    if not inc:
++        raise HTTPException(404, "incident not found")
++    return {"incident_id": inc.id, "cluster_key": inc.cluster_key, "status": inc.status, "count": inc.count}
++
++@app.get("/evidence/incident/{incident_id}")
++def incident_evidence(incident_id: int, db: Session = Depends(get_db)):
++    inc = db.query(models.Incident).filter(models.Incident.id == incident_id).first()
++    if not inc:
++        raise HTTPException(404, "incident not found")
++    events = db.query(models.Event).filter(models.Event.incident_id == incident_id).order_by(models.Event.id.desc()).limit(50).all()
++    # Aggregate redaction maps
++    agg = {}
++    for ev in events:
++        if ev.redaction_map:
++            for k, v in ev.redaction_map.items():
++                agg[k] = agg.get(k, 0) + int(v)
++    approvals = db.query(models.Approval).filter(models.Approval.incident_id == incident_id).order_by(models.Approval.id).all()
++    return {
++        "incident_id": inc.id,
++        "cluster_key": inc.cluster_key,
++        "status": inc.status,
++        "event_sample": [e.redacted for e in events[:3]],
++        "redaction_aggregate": agg,
++        "approvals": [{"id": a.id, "action_name": a.action_name, "notes": a.notes} for a in approvals],
++    }

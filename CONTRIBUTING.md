@@ -8,6 +8,7 @@
 
 ## Tests
 - `pytest -q`
+<<<<<<< HEAD
 - Please add a smoke test for new pipeline behavior (no PII in tests).
 
 ## Code style
@@ -17,3 +18,14 @@
 
 ## Licensing
 By contributing, you agree your contributions are licensed under **AGPL-3.0**.
+=======
+- Please add a smoke test for new pipeline behavior.
+
+## Code style
+- Python 3.10+, FastAPI, SQLAlchemy 2.x.
+- No PII in examples or tests. Use redacted strings.
+- Keep “actions” human-gated.
+
+## Licensing
+By contributing, you agree your contributions are licensed under AGPL-3.0.
+>>>>>>> 01defdf (Initial code import (local state))

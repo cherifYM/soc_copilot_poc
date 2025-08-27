@@ -78,14 +78,23 @@ class ApproveRequest(BaseModel):
 def ingest_logs(payload: IngestRequest, db: Session = Depends(get_db)):
     created = 0
     for e in payload.events:
+<<<<<<< HEAD
         evt = e.dict()
+=======
+        # Pydantic v2: replace .dict() with .model_dump(); drop Nones to keep keys clean
+        evt = e.model_dump(exclude_none=True)
+>>>>>>> 01defdf (Initial code import (local state))
 
         # Redact before clustering/summarizing
         red, _ = redact_pii(evt.get("message", ""))
         tag = residency_tag(evt, DEFAULT_TAG)
         norm_cluster = normalize_event({**evt, "message": red})
         ck = cluster_key(evt, norm_cluster)
+<<<<<<< HEAD
         et_lower = (e.event_type or "").lower()
+=======
+        et_lower = (evt.get("event_type") or "").lower()
+>>>>>>> 01defdf (Initial code import (local state))
 
         # Benign → attach to incident; if new, create as status="noise"
         if et_lower in BENIGN_TYPES and et_lower not in CRITICAL_TYPES:
@@ -105,17 +114,28 @@ def ingest_logs(payload: IngestRequest, db: Session = Depends(get_db)):
                 db.add(incident)
                 db.flush()
 
+<<<<<<< HEAD
             ev = models.Event(
                 source=e.source,
                 event_type=e.event_type,
                 raw=e.message if STORE_RAW else "",
+=======
+            ev_row = models.Event(
+                source=evt.get("source", ""),
+                event_type=et_lower or e.event_type,
+                raw=evt.get("message", "") if STORE_RAW else "",
+>>>>>>> 01defdf (Initial code import (local state))
                 normalized=norm_cluster,
                 redacted=red,
                 residency_tag=tag,
                 cluster_key=ck,
                 incident_id=incident.id,
             )
+<<<<<<< HEAD
             db.add(ev)
+=======
+            db.add(ev_row)
+>>>>>>> 01defdf (Initial code import (local state))
             incident.count += 1
             incident.summary = summarize_incident(red, incident.count)
 
@@ -165,17 +185,28 @@ def ingest_logs(payload: IngestRequest, db: Session = Depends(get_db)):
             db.add(incident)
             db.flush()
 
+<<<<<<< HEAD
         ev = models.Event(
             source=e.source,
             event_type=e.event_type,
             raw=e.message if STORE_RAW else "",
+=======
+        ev_row = models.Event(
+            source=evt.get("source", ""),
+            event_type=et_lower or e.event_type,
+            raw=evt.get("message", "") if STORE_RAW else "",
+>>>>>>> 01defdf (Initial code import (local state))
             normalized=norm_cluster,
             redacted=red,
             residency_tag=tag,
             cluster_key=ck,
             incident_id=incident.id,
         )
+<<<<<<< HEAD
         db.add(ev)
+=======
+        db.add(ev_row)
+>>>>>>> 01defdf (Initial code import (local state))
         incident.count += 1
         incident.summary = summarize_incident(red, incident.count)
         created += 1
@@ -193,6 +224,10 @@ def ingest_logs(payload: IngestRequest, db: Session = Depends(get_db)):
         "suppression_rate": round(suppression_rate, 3),
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 01defdf (Initial code import (local state))
 @app.get("/incidents")
 def list_incidents(db: Session = Depends(get_db)):
     rows = db.query(models.Incident).order_by(models.Incident.last_seen.desc()).all()

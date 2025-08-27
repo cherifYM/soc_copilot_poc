@@ -1,12 +1,18 @@
 .venv/
 __pycache__/
 *.pyc
+<<<<<<< HEAD
 *.pyo
 *.pyd
+=======
+>>>>>>> 01defdf (Initial code import (local state))
 .env
 .env.*
 soc.db
 artifacts/
 .pytest_cache/
 coverage.xml
+<<<<<<< HEAD
 .DS_Store
+=======
+>>>>>>> 01defdf (Initial code import (local state))
