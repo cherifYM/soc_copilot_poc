@@ -38,5 +38,3 @@ make seed
 
 # Terminal B
 make run-ui   # http://localhost:8501
-```
->>>>>>> 01defdf (Initial code import (local state))
