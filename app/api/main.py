@@ -8,15 +8,14 @@ from sqlalchemy.orm import Session, joinedload
 from dotenv import load_dotenv
 import os
 import re
-
+from app.pipeline.pii_redactor import REDACTION_PATTERNS
 from app.core.db import Base, engine, get_db
-from app.core import models
+import app.core.models as models
 from app.pipeline.normalizer import normalize_event
-from app.pipeline.pii_redactor import redact_pii, residency_tag, REDACTION_PATTERNS
+from app.pipeline.pii_redactor import redact_pii, residency_tag
 from app.pipeline.clustering import cluster_key, incident_title, explain_cluster
 from app.pipeline.summarizer import summarize_incident
 from app.playbooks.suggester import suggest_actions
-import app.core.hooks  # noqa: F401  # registers SQLAlchemy listeners on import
 
 # ----- Setup -----
 load_dotenv()
@@ -78,23 +77,16 @@ class ApproveRequest(BaseModel):
 def ingest_logs(payload: IngestRequest, db: Session = Depends(get_db)):
     created = 0
     for e in payload.events:
-<<<<<<< HEAD
-        evt = e.dict()
-=======
         # Pydantic v2: replace .dict() with .model_dump(); drop Nones to keep keys clean
         evt = e.model_dump(exclude_none=True)
->>>>>>> 01defdf (Initial code import (local state))
 
         # Redact before clustering/summarizing
         red, _ = redact_pii(evt.get("message", ""))
         tag = residency_tag(evt, DEFAULT_TAG)
         norm_cluster = normalize_event({**evt, "message": red})
         ck = cluster_key(evt, norm_cluster)
-<<<<<<< HEAD
-        et_lower = (e.event_type or "").lower()
-=======
+
         et_lower = (evt.get("event_type") or "").lower()
->>>>>>> 01defdf (Initial code import (local state))
 
         # Benign → attach to incident; if new, create as status="noise"
         if et_lower in BENIGN_TYPES and et_lower not in CRITICAL_TYPES:
@@ -114,28 +106,18 @@ def ingest_logs(payload: IngestRequest, db: Session = Depends(get_db)):
                 db.add(incident)
                 db.flush()
 
-<<<<<<< HEAD
-            ev = models.Event(
-                source=e.source,
-                event_type=e.event_type,
-                raw=e.message if STORE_RAW else "",
-=======
             ev_row = models.Event(
                 source=evt.get("source", ""),
-                event_type=et_lower or e.event_type,
+                event_type=et_lower,
                 raw=evt.get("message", "") if STORE_RAW else "",
->>>>>>> 01defdf (Initial code import (local state))
                 normalized=norm_cluster,
                 redacted=red,
                 residency_tag=tag,
                 cluster_key=ck,
                 incident_id=incident.id,
             )
-<<<<<<< HEAD
-            db.add(ev)
-=======
+
             db.add(ev_row)
->>>>>>> 01defdf (Initial code import (local state))
             incident.count += 1
             incident.summary = summarize_incident(red, incident.count)
 
@@ -185,60 +167,97 @@ def ingest_logs(payload: IngestRequest, db: Session = Depends(get_db)):
             db.add(incident)
             db.flush()
 
-<<<<<<< HEAD
-        ev = models.Event(
-            source=e.source,
-            event_type=e.event_type,
-            raw=e.message if STORE_RAW else "",
-=======
         ev_row = models.Event(
             source=evt.get("source", ""),
-            event_type=et_lower or e.event_type,
+            event_type=et_lower,
             raw=evt.get("message", "") if STORE_RAW else "",
->>>>>>> 01defdf (Initial code import (local state))
             normalized=norm_cluster,
             redacted=red,
             residency_tag=tag,
             cluster_key=ck,
             incident_id=incident.id,
         )
-<<<<<<< HEAD
-        db.add(ev)
-=======
+
         db.add(ev_row)
->>>>>>> 01defdf (Initial code import (local state))
         incident.count += 1
         incident.summary = summarize_incident(red, incident.count)
         created += 1
 
     db.commit()
+    return {"status": "success", "ingested": created}
 
-    # Quick summary in response
+
+
+@app.get("/metrics")
+def metrics(db: Session = Depends(get_db)):
     total_events = db.query(models.Event).count()
     total_incidents = db.query(models.Incident).count()
     suppression_rate = 1.0 - (total_incidents / total_events) if total_events else 0.0
     return {
-        "ingested": created,
         "events": total_events,
         "incidents": total_incidents,
         "suppression_rate": round(suppression_rate, 3),
     }
 
-<<<<<<< HEAD
-=======
+@app.get("/evidence/{event_id}")
+def evidence(event_id: int, db: Session = Depends(get_db)):
+    ev = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not ev:
+        raise HTTPException(404, "Event not found")
+    return {
+        "event_id": ev.id,
+        "residency_tag": ev.residency_tag,
+        "redacted": ev.redacted,
+        "incident_id": ev.incident_id,
+        "cluster_key": ev.cluster_key,
+    }
 
->>>>>>> 01defdf (Initial code import (local state))
+# Friendly aliases (no breaking change)
+@app.get("/events/{event_id}/evidence")
+def evidence_alias(event_id: int, db: Session = Depends(get_db)):
+    return evidence(event_id, db)
+
+@app.get("/incidents/{incident_id}/evidence")
+def incident_evidence(incident_id: int, db: Session = Depends(get_db)):
+    ev = db.query(models.Event).filter(models.Event.incident_id == incident_id).first()
+    if not ev:
+        raise HTTPException(404, "Incident not found")
+    return {
+        "event_id": ev.id,
+        "residency_tag": ev.residency_tag,
+        "redacted": ev.redacted,
+        "incident_id": ev.incident_id,
+        "cluster_key": ev.cluster_key,
+    }
+
+@app.get("/health")
+def health():
+    return {"ok": True}
+# vim: set ft=python ts=4 sw=4 expandtab:
+
+from fastapi.openapi.utils import get_openapi
+_openapi_cache = None
+def custom_openapi():
+    global _openapi_cache
+    if _openapi_cache:
+        return _openapi_cache
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description="SOC Copilot PoC API",
+        routes=app.routes,
+    )
+    _openapi_cache = schema
+    return _openapi_cache
+
+app.openapi = custom_openapi
+
+
 @app.get("/incidents")
 def list_incidents(db: Session = Depends(get_db)):
     rows = db.query(models.Incident).order_by(models.Incident.last_seen.desc()).all()
     return [
-        {
-            "id": r.id,
-            "title": r.title,
-            "summary": r.summary,
-            "count": r.count,
-            "status": r.status,
-        }
+        {"id": r.id, "title": r.title, "summary": r.summary, "count": r.count, "status": r.status}
         for r in rows
     ]
 
@@ -262,82 +281,6 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
         "sample_redacted": sample.redacted if sample else "",
     }
 
-@app.get("/evidence/incident/{incident_id}")
-def incident_evidence(incident_id: int, db: Session = Depends(get_db)):
-    """Return incident evidence, redaction stats, approvals and why it clustered."""
-    inc = db.query(models.Incident).filter(models.Incident.id == incident_id).first()
-    if not inc:
-        raise HTTPException(404, "incident not found")
-
-    events = (
-        db.query(models.Event)
-        .filter(models.Event.incident_id == incident_id)
-        .order_by(models.Event.id.desc())
-        .limit(50)
-        .all()
-    )
-
-    # why-clustered (uses normalized text from latest event)
-    why = {}
-    if events:
-        latest = events[0]
-        why = explain_cluster(
-            {"event_type": latest.event_type, "user": None, "ip": None, "ts": None},
-            latest.normalized,
-        )
-
-    # Aggregate redaction counts using shared patterns
-    redaction_aggregate = {}
-    for ev in events:
-        s = ev.redacted or ""
-        for k, pat in REDACTION_PATTERNS.items():
-            c = len(pat.findall(s))
-            if c:
-                redaction_aggregate[k] = redaction_aggregate.get(k, 0) + c
-
-    approvals = (
-        db.query(models.Approval)
-        .filter(models.Approval.incident_id == incident_id)
-        .order_by(models.Approval.id.asc())
-        .all()
-    )
-
-    return {
-        "incident_id": inc.id,
-        "cluster_key": inc.cluster_key,
-        "status": inc.status,
-        "count": inc.count,
-        "why_clustered": why,
-        "event_sample": [e.redacted for e in events[:3]],
-        "redaction_aggregate": redaction_aggregate,
-        "approvals": [
-            {"id": a.id, "action_name": a.action_name, "notes": a.notes}
-            for a in approvals
-        ],
-    }
-
-@app.get("/incidents/by-event/{event_id}")
-def incident_by_event(event_id: int, db: Session = Depends(get_db)):
-    ev = db.get(models.Event, event_id)
-    if not ev:
-        raise HTTPException(404, "event not found")
-    inc = db.get(models.Incident, ev.incident_id) if ev.incident_id else None
-    if not inc:
-        raise HTTPException(404, "incident not found")
-    return {"incident_id": inc.id, "cluster_key": inc.cluster_key, "status": inc.status}
-
-@app.get("/incidents/by-cluster/{ck}")
-def incident_by_cluster(ck: str, db: Session = Depends(get_db)):
-    inc = db.query(models.Incident).filter(models.Incident.cluster_key == ck).first()
-    if not inc:
-        raise HTTPException(404, "incident not found")
-    return {
-        "incident_id": inc.id,
-        "cluster_key": inc.cluster_key,
-        "status": inc.status,
-        "count": inc.count,
-    }
-
 @app.post("/incidents/{incident_id}/suggest_actions")
 def suggest_incident_actions(incident_id: int, db: Session = Depends(get_db)):
     inc = db.query(models.Incident).filter(models.Incident.id == incident_id).first()
@@ -357,93 +300,7 @@ def approve_action(incident_id: int, req: ApproveRequest, db: Session = Depends(
     inc = db.query(models.Incident).filter(models.Incident.id == incident_id).first()
     if not inc:
         raise HTTPException(404, "Incident not found")
-    rec = models.Approval(
-        incident_id=incident_id,
-        action_name=req.action_name,
-        notes=req.notes or "",
-    )
+    rec = models.Approval(incident_id=incident_id, action_name=req.action_name, notes=req.notes or "")
     db.add(rec)
     db.commit()
     return {"ok": True, "approval_id": rec.id}
-
-@app.get("/events/recent")
-def events_recent(limit: int = 50, db: Session = Depends(get_db)):
-    rows = (
-        db.query(models.Event)
-        .options(joinedload(models.Event.incident))  # prefetch incidents to avoid N+1
-        .order_by(models.Event.id.desc())
-        .limit(max(1, min(limit, 500)))
-        .all()
-    )
-    return [
-        {
-            "id": r.id,
-            "incident_id": r.incident_id,
-            "event_type": r.event_type,
-            "incident_status": r.incident.status if r.incident else None,
-            "redacted": r.redacted,
-        }
-        for r in rows
-    ]
-
-@app.get("/metrics")
-def metrics(db: Session = Depends(get_db)):
-    total_events = db.query(models.Event).count()
-    total_incidents = db.query(models.Incident).count()
-
-    # Duplicate count by cluster
-    rows = (
-        db.query(models.Event.cluster_key, func.count(models.Event.id))
-        .group_by(models.Event.cluster_key)
-        .all()
-    )
-    suppressed_events = sum(max(0, cnt - 1) for _, cnt in rows)
-
-    # Active incidents = exclude 'noise'
-    incidents_active = (
-        db.query(models.Incident)
-        .filter(models.Incident.status != "noise")
-        .count()
-    )
-
-    suppression_rate = 1.0 - (total_incidents / total_events) if total_events else 0.0
-    suppression_rate_active = (
-        1.0 - (incidents_active / total_events) if total_events else 0.0
-    )
-    dup_rate = (suppressed_events / total_events) if total_events else 0.0
-
-    return {
-        "events": total_events,
-        "incidents": total_incidents,
-        "incidents_active": incidents_active,
-        "suppressed_events": suppressed_events,
-        "suppression_rate": round(suppression_rate, 3),
-        "suppression_rate_active": round(suppression_rate_active, 3),
-        "dup_rate": round(dup_rate, 3),
-    }
-
-@app.get("/evidence/{event_id}")
-def evidence(event_id: int, db: Session = Depends(get_db)):
-    ev = db.query(models.Event).filter(models.Event.id == event_id).first()
-    if not ev:
-        raise HTTPException(404, "Event not found")
-    return {
-        "event_id": ev.id,
-        "residency_tag": ev.residency_tag,
-        "redacted": ev.redacted,
-        "incident_id": ev.incident_id,
-        "cluster_key": ev.cluster_key,
-    }
-
-# Friendly aliases (no breaking change)
-@app.get("/events/{event_id}/evidence")
-def evidence_alias(event_id: int, db: Session = Depends(get_db)):
-    return evidence(event_id, db)
-
-@app.get("/incidents/{incident_id}/evidence")
-def incident_evidence_alias(incident_id: int, db: Session = Depends(get_db)):
-    return incident_evidence(incident_id, db)
-
-@app.get("/health")
-def health():
-    return {"ok": True}

@@ -1,8 +1,9 @@
 .venv/
-.env
-.env.*
-soc.db
 __pycache__/
-.pytest_cache/
 *.pyc
-.DS_Store
+soc.db
+.streamlit/
+.vscode/
+*_local/
+_backup*/
+*.log

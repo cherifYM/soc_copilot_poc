@@ -1,5 +1,5 @@
-from typing import List, Dict
 
+from typing import List
 PLAYBOOKS = {
     "auth_failure": [
         "Check recent password change for the user.",
@@ -17,11 +17,8 @@ PLAYBOOKS = {
         "Document in ticket and close or escalate.",
     ]
 }
-
 def suggest_actions(event_type: str) -> List[str]:
     et = (event_type or "").lower()
-    if "auth" in et or "login" in et:
-        return PLAYBOOKS["auth_failure"]
-    if "scan" in et or "nmap" in et:
-        return PLAYBOOKS["port_scan"]
+    if "auth" in et or "login" in et: return PLAYBOOKS["auth_failure"]
+    if "scan" in et or "nmap" in et: return PLAYBOOKS["port_scan"]
     return PLAYBOOKS["default"]

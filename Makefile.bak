@@ -1,0 +1,42 @@
+PY?=.venv/bin/python
+PIP?=.venv/bin/pip
+UVICORN?=.venv/bin/uvicorn
+STREAMLIT?=.venv/bin/streamlit
+APP?=app.api.main:app
+PORT?=8000
+
+.PHONY: setup install run-api seed test ui db-reset clean
+
+setup: .venv install
+
+.venv:
+	python3 -m venv .venv
+	. .venv/bin/activate; python -m pip install -U pip setuptools wheel
+
+install: requirements.txt
+	$(PIP) install -r requirements.txt
+
+run-api: install
+	$(UVICORN) $(APP) --reload --port $(PORT)
+
+seed: install
+	$(PY) -m app.seed
+
+test: install
+	$(PY) -m pytest -q
+
+ui: install
+	$(STREAMLIT) run ui/streamlit_app.py
+
+db-reset:
+	rm -f soc.db
+	$(PY) - <<'PY'
+from app.core.db import Base, engine
+Base.metadata.drop_all(bind=engine)
+Base.metadata.create_all(bind=engine)
+print("DB reset")
+PY
+
+clean:
+	find . -name '__pycache__' -exec rm -rf {} +
+	find . -name '*.pyc' -delete
